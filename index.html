@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+
+  <div id="google_translate_element"></div>
+
+<script type="text/javascript">
+  function googleTranslateElementInit() {
+    new google.translate.TranslateElement({
+      pageLanguage: 'pt',                      // idioma original da página
+      includedLanguages: 'pt,fr,en',          // idiomas disponíveis
+      layout: google.translate.TranslateElement.InlineLayout.SIMPLE
+    }, 'google_translate_element');
+  }
+</script>
+
+<script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>	
+
+  <title>Desafio das Metrópoles 🌍</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #f8f9fa;
+      margin: 0;
+      height: 100vh;
+    }
+    h1 {
+      margin: 1rem;
+      color: #333;
+    }
+    #map {
+      width: 90vw;
+      height: 60vh;
+      max-width: 1000px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      z-index: 0;
+    }
+    #painel {
+      margin-top: 1rem;
+      background: white;
+      padding: 1rem 2rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      text-align: center;
+      z-index: 10;
+    }
+    #painel p {
+      margin: 0.3rem 0;
+    }
+    button {
+      margin: 0.3rem;
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background-color: #0078D7;
+      color: white;
+      font-size: 1rem;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background-color: #005fa3;
+    }
+    @keyframes blink {
+      0%, 100% { background-color: #d4edda; }
+      50% { background-color: #c3e6cb; }
+    }
+    .acerto {
+      animation: blink 0.6s;
+    }
+    .erro {
+      animation: blink 0.6s reverse;
+      background-color: #f8d7da !important;
+    }
+    #final {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      color: white;
+      text-align: center;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      z-index: 1000;
+    }
+    #final h2 {
+      margin-bottom: 1rem;
+      font-size: 2rem;
+    }
+    #final button {
+      background-color: #2ecc71;
+      font-size: 1.1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Desafio das Metrópoles 🌎</h1>
+
+
+  <div>
+
+	<strong>Localize</strong> - <a href="/modo-2">Descubra</a>
+
+  </div>
+
+
+  <div id="painel">
+    <p><strong>Cidade atual:</strong> <span id="cidadeAtual">---</span></p>
+    <p><strong>Pontuação:</strong> <span id="pontos">0</span></p>
+    <p><strong>Tentativas:</strong> <span id="tentativas">0</span></p>
+    <p><strong>Restantes:</strong> <span id="restantes"></span></p>
+    <button id="pularBtn">Pular</button>
+    <button id="reiniciarBtn">Reiniciar</button>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="final">
+    <h2>🏆 Parabéns!</h2>
+    <p id="resultadoFinal"></p>
+    <button id="jogarNovamente">Jogar novamente</button>
+  </div>
+
+  <script>
+    // --- Dados das metrópoles ---
+    const cidades = [
+      { nome: "Toronto", coords: [43.65107, -79.347015] },
+      { nome: "Montreal", coords: [45.501689, -73.567256] },
+      { nome: "Chiacago", coords: [41.8781, -87.6298] },
+      { nome: "Washiton", coords: [38.89511, -77.03637] },
+      { nome: "São Francisco", coords: [37.7749, -122.4194] },
+      { nome: "Nairobe", coords: [-1.286389, 36.817223] },
+      { nome: "Luanda", coords: [-8.838333, 13.234444] },
+      { nome: "Sydney", coords: [-33.8688, 151.2093] },
+      { nome: "Hongkong", coords: [22.3193, 114.1694] },
+      { nome: "Roma", coords: [41.9028, 12.4964] }
+    ];
+
+    // --- Estado do jogo ---
+    let fila = [];
+    let pontos = 0;
+    let tentativas = 0;
+    let cidadeAtual = null;
+    let somHabilitado = false;
+
+    // --- Elementos da interface ---
+    const spanCidade = document.getElementById("cidadeAtual");
+    const spanPontos = document.getElementById("pontos");
+    const spanTentativas = document.getElementById("tentativas");
+    const spanRestantes = document.getElementById("restantes");
+    const painel = document.getElementById("painel");
+    const pularBtn = document.getElementById("pularBtn");
+    const reiniciarBtn = document.getElementById("reiniciarBtn");
+    const finalDiv = document.getElementById("final");
+    const resultadoFinal = document.getElementById("resultadoFinal");
+    const jogarNovamente = document.getElementById("jogarNovamente");
+
+    // --- Sons ---
+    const somAcerto = new Audio("https://cdn.pixabay.com/audio/2022/03/15/audio_56b6d1cc09.mp3");
+    const somErro = new Audio("https://cdn.pixabay.com/audio/2022/03/15/audio_5a9eab2bbd.mp3");
+
+    // --- Funções ---
+    const embaralhar = (array) => array.sort(() => Math.random() - 0.5);
+
+    const atualizarPainel = () => {
+      spanPontos.textContent = pontos;
+      spanTentativas.textContent = tentativas;
+      spanRestantes.textContent = fila.length;
+      spanCidade.textContent = cidadeAtual ? cidadeAtual.nome : "---";
+    };
+
+    const piscar = (classe) => {
+      painel.classList.add(classe);
+      setTimeout(() => painel.classList.remove(classe), 600);
+    };
+
+    const mostrarFinal = () => {
+      finalDiv.style.display = "flex";
+      resultadoFinal.textContent = `Você acertou ${pontos} de ${tentativas} tentativas!`;
+    };
+
+    // --- Inicializa mapa ---
+    const map = L.map("map", { worldCopyJump: true }).setView([20, 0], 2);
+    L.tileLayer("https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", {
+      attribution: '© OpenStreetMap contributors, Tiles courtesy of HOT OSM',
+      minZoom: 2,
+      maxZoom: 6
+    }).addTo(map);
+
+    // --- Cria marcadores ---
+    const marcadores = cidades.map(c => {
+      const marker = L.circleMarker(c.coords, {
+        radius: 7,
+        color: "#333",
+        fillColor: "#333",
+        fillOpacity: 0.8
+      }).addTo(map);
+      marker.cidade = c.nome;
+      return marker;
+    });
+
+    // --- Funções principais ---
+    const proximaCidade = () => {
+      if (fila.length === 0) {
+        mostrarFinal();
+        return;
+      }
+      cidadeAtual = fila.shift();
+      atualizarPainel();
+    };
+
+    const iniciarJogo = () => {
+      pontos = 0;
+      tentativas = 0;
+      fila = embaralhar([...cidades]); // ordem aleatória
+      cidadeAtual = null;
+      marcadores.forEach(m => m.setStyle({ color: "#333", fillColor: "#333" }));
+      finalDiv.style.display = "none";
+      proximaCidade();
+    };
+
+    marcadores.forEach(marker => {
+      marker.on("click", () => {
+        if (!cidadeAtual) return;
+        tentativas++;
+
+        if (marker.cidade === cidadeAtual.nome) {
+          pontos++;
+          marker.setStyle({ color: "green", fillColor: "green" });
+          piscar("acerto");
+          if (somHabilitado) somAcerto.play();
+        } else {
+          marker.setStyle({ color: "red", fillColor: "red" });
+          fila.push(cidadeAtual);
+          piscar("erro");
+          if (somHabilitado) somErro.play();
+        }
+        proximaCidade();
+      });
+    });
+
+    pularBtn.addEventListener("click", () => {
+      if (cidadeAtual) fila.push(cidadeAtual);
+      proximaCidade();0
+    });
+
+    reiniciarBtn.addEventListener("click", iniciarJogo);
+    jogarNovamente.addEventListener("click", iniciarJogo);
+
+    // --- Habilita sons após o primeiro clique ---
+    document.body.addEventListener("click", () => {
+      if (!somHabilitado) {
+        somHabilitado = true;
+        console.log("🎧 Som ativado!");
+      }
+    }, { once: true });
+
+    // --- Começa o jogo ---
+    iniciarJogo();
+  </script>
+</body>
+</html>
